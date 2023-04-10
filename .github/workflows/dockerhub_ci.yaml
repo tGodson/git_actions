@@ -1,0 +1,38 @@
+name: Build and Deploy to Docker Hub
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      run: |
+        git clone https://github.com/${{ github.repository }} .
+        git checkout ${{ github.sha }}
+
+    - name: Set up Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+    - name: Login to Docker Hub
+      run: |
+        echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+    - name: Build and push Docker image
+      run: |
+        COMMIT_COUNT=$(git rev-list --count HEAD)
+        RUN_NUMBER=${{ github.run_number }}
+        VERSION="v1.${COMMIT_COUNT}.${RUN_NUMBER}"
+        IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.APP_NAME }}:${VERSION}"
+        
+        docker build -t $IMAGE_NAME -f date/Dockerfile date/
+        docker push $IMAGE_NAME
